@@ -401,7 +401,7 @@ async function loadExtras(){
 const chunkOf=w=>{let x=0;for(const c of w)x=(x*31+c.charCodeAt(0))%1000003;return x%NCH};
 const TOPS=new Map(), CHUNKS=new Map();
 function loadChunk(k){
-  if(!CHUNKS.has(k)) CHUNKS.set(k,fetch("poradi/p"+String(k).padStart(2,"0")+".txt").then(r=>r.ok?r.text():"").then(t=>{
+  if(!CHUNKS.has(k)) CHUNKS.set(k,(f=>fetch("poradi/"+f).then(r=>r.ok?r:fetch(f)))("p"+String(k).padStart(2,"0")+".txt").then(r=>r.ok?r.text():"").then(t=>{
     for(const line of t.split("\n")){const j=line.indexOf("\t");if(j<0)continue;const b=atob(line.slice(j+1)),u=new Uint16Array(b.length>>1);for(let i=0;i<u.length;i++)u[i]=b.charCodeAt(2*i)|b.charCodeAt(2*i+1)<<8;TOPS.set(line.slice(0,j),u)}
   }).catch(()=>{}));
   return CHUNKS.get(k);
@@ -879,7 +879,7 @@ function submit(raw){
     animateTo(best);
     const prevBest=Math.min(...st.g.slice(0,-1).map(g=>rankOf(g.w)),Infinity);
     let msg=r===FAR?`${show(w)}: daleko, až za 3 000. místem. Přesné místo dopočítám za chvilku.`:`${show(w)}: ${r.toLocaleString("cs-CZ")}. místo. ${quip(t)}`;
-    if(st.g.length>1&&r<prevBest&&r!==FAR) msg+=` Nový rekord, o ${(prevBest-r).toLocaleString("cs-CZ")} míst blíž!`;
+    if(st.g.length>1&&r<prevBest&&r!==FAR) msg+=prevBest===FAR?" Nový rekord!":` Nový rekord, o ${(prevBest-r).toLocaleString("cs-CZ")} míst blíž!`;
     setStatus(msg); beep(t);
   }
 }
