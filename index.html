@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Teploměr: česká slovní hra, každý den tři tajná slova.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%2213%22 y=%222%22 width=%226%22 height=%2220%22 rx=%223%22 fill=%22%23e5452f%22/%3E%3Ccircle cx=%2216%22 cy=%2224%22 r=%226%22 fill=%22%23e5452f%22/%3E%3C/svg%3E">
+<title>Teploměr</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: přístroj vlevo (na mobilu vodorovně nahoře), vpravo hra; pozadím prosvítá záře, která se s teplotou barví do ruda */
+:root{
+  --bg:#eef1f5; --surface:rgba(255,255,255,.78); --surface-solid:#ffffff; --surface-2:#f3f6f9; --fg:#0f1620; --muted:#5b6878; --line:rgba(20,40,70,.10);
+  --glass:#f6fafd; --glass-edge:#9db0c3; --tick:#3e4c5b;
+  --hot:#e5452f; --cold:#2f74d0; --on-hot:#ffffff; --heat-l:46%; --track:#e3e9ef;
+  --shadow:0 1px 2px rgba(15,25,40,.06),0 8px 24px -12px rgba(15,25,40,.18);
+  --glow-h:214; --glow-a:.10;
+  --plate-hi:#fbfcfd; --plate-lo:#e3e9ef; --plate-edge:#9aa9b8; --plate-line:#c3cfda; --screw:#d9dfe5; --metal:#c9d1d9; --steam:#9fb0c0;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#090c11; --surface:rgba(22,28,37,.72); --surface-solid:#151b24; --surface-2:#1b222d; --fg:#ecf1f6; --muted:#90a0b2; --line:rgba(255,255,255,.08);
+  --glass:#18202b; --glass-edge:#5f7389; --tick:#a7b6c6;
+  --hot:#ff5b43; --cold:#5a9bf0; --on-hot:#160603; --heat-l:62%; --track:#222b37;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px -14px rgba(0,0,0,.7); --plate-hi:#232c38; --plate-lo:#161d26; --plate-edge:#52627a; --plate-line:#34404f; --screw:#3a4554; --metal:#56657a; --steam:#c7d3df; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#090c11; --surface:rgba(22,28,37,.72); --surface-solid:#151b24; --surface-2:#1b222d; --fg:#ecf1f6; --muted:#90a0b2; --line:rgba(255,255,255,.08);
+  --glass:#18202b; --glass-edge:#5f7389; --tick:#a7b6c6;
+  --hot:#ff5b43; --cold:#5a9bf0; --on-hot:#160603; --heat-l:62%; --track:#222b37;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 30px -14px rgba(0,0,0,.7); --plate-hi:#232c38; --plate-lo:#161d26; --plate-edge:#52627a; --plate-line:#34404f; --screw:#3a4554; --metal:#56657a; --steam:#c7d3df; color-scheme:dark}
+
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{color:var(--fg);background:
+  radial-gradient(60vmax 60vmax at 12% 28%,hsl(var(--glow-h) 90% 55% / var(--glow-a)),transparent 70%) fixed,
+  radial-gradient(50vmax 50vmax at 95% -5%,hsl(calc(var(--glow-h) + 30) 90% 60% / calc(var(--glow-a) * .6)),transparent 70%) fixed,
+  var(--bg)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.5;min-height:100%;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:24px 64px}
+.layout.shake{animation:shake .5s cubic-bezier(.36,.07,.19,.97)}
+@keyframes shake{10%,90%{transform:translate(-2px,1px)}20%,80%{transform:translate(4px,-2px)}30%,50%,70%{transform:translate(-7px,3px)}40%,60%{transform:translate(7px,-3px)}}
+
+.layout{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:240px minmax(0,1fr);gap:44px;align-items:start}
+.thermo-col{position:sticky;top:calc(20px + env(safe-area-inset-top, 0px));display:flex;flex-direction:column;align-items:center;gap:10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:22px 14px 20px;box-shadow:var(--shadow);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+#thermo{width:100%;height:auto;display:block;overflow:visible}
+.readout{text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px}
+.readout .big{font-family:var(--f-display);font-weight:800;font-size:3rem;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:hsl(var(--h,214) 78% var(--heat-l));transition:color .6s}
+.readout .word{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:3px 10px;border-radius:99px;background:var(--surface-2)}
+
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;gap:2px}
+h1{font-family:var(--f-display);font-weight:800;font-size:clamp(2.4rem,7vw,3.8rem);line-height:.9;margin:0;letter-spacing:-.04em}
+h1 span{background:linear-gradient(90deg,var(--cold),var(--hot));-webkit-background-clip:text;background-clip:text;color:transparent}
+.meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{font-family:var(--f-mono);font-size:.78rem;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:6px 12px;display:inline-flex;gap:6px;align-items:center}
+.pill b{color:var(--fg);font-weight:600}
+.theme-tag{margin:-4px 0 0;font-family:var(--f-mono);font-size:.8rem;font-weight:600;color:var(--hot);display:flex;align-items:center;gap:8px}
+.bg-load{margin:-4px 0 0;font-family:var(--f-mono);font-size:.75rem;color:var(--muted)}
+.theme-tag::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--hot);box-shadow:0 0 0 4px color-mix(in srgb,var(--hot) 20%,transparent)}
+.pill select{font:inherit;color:var(--fg);background:transparent;border:0;padding:0;cursor:pointer}
+.lede{margin:0;color:var(--muted);max-width:52ch;font-size:1.05rem}
+
+form{display:flex;align-items:center;gap:6px;padding:6px;background:var(--surface-solid);border:1px solid var(--line);border-radius:99px;box-shadow:var(--shadow);transition:box-shadow .2s,border-color .2s}
+form:focus-within{border-color:color-mix(in srgb,var(--hot) 55%,transparent);box-shadow:0 0 0 5px color-mix(in srgb,var(--hot) 14%,transparent),var(--shadow)}
+#guess{flex:1;min-width:0;font:inherit;font-size:1.2rem;padding:10px 16px;border:0;background:transparent;color:var(--fg)}
+#guess:focus{outline:none}
+button{font:inherit;font-weight:700;cursor:pointer;border-radius:99px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:10px 18px;transition:transform .12s,background .2s,border-color .2s}
+button:hover:not(:disabled){border-color:color-mix(in srgb,var(--fg) 25%,transparent)}
+button:active:not(:disabled){transform:scale(.97)}
+button:focus-visible,select:focus-visible{outline:3px solid var(--hot);outline-offset:2px}
+button.primary{background:linear-gradient(135deg,var(--hot),color-mix(in srgb,var(--hot) 70%,#ff9a3c));border:0;color:var(--on-hot);padding:12px 24px;box-shadow:0 6px 18px -8px var(--hot)}
+button:disabled,#guess:disabled{opacity:.45;cursor:default}
+.status{min-height:1.6em;margin:-8px 0 0 18px;color:var(--muted);font-size:.95rem}
+.status.err{color:var(--hot)}
+.status button{padding:2px 12px;font-size:.9rem;margin-left:4px}
+
+.loading{display:flex;flex-direction:column;gap:6px;font-size:.9rem;color:var(--muted);padding-inline:18px}
+.loading .bar{height:4px;border-radius:99px;background:var(--track);overflow:hidden}
+.loading .bar i{display:block;height:100%;width:3%;background:linear-gradient(90deg,var(--cold),var(--hot));transition:width .2s}
+
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.stat span{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.stat b{font-family:var(--f-display);font-weight:800;font-size:1.5rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.label{font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 8px 4px}
+ul.rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(70px,30%) 4.6rem;align-items:center;gap:14px;
+  padding:11px 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;position:relative;overflow:hidden;
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.row::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,hsl(var(--h) 85% 55% / .10),transparent 45%);pointer-events:none}
+.row .w{font-weight:700;overflow-wrap:anywhere;min-width:0;font-size:1.02rem}
+.row .w small{font-family:var(--f-mono);font-weight:500;color:var(--muted);margin-left:8px;font-size:.72rem;white-space:nowrap;background:var(--surface-2);padding:1px 7px;border-radius:99px}
+.row .w em{font-style:normal;font-weight:400;color:var(--muted);font-size:.85rem;margin-left:6px}
+.tube{height:6px;background:var(--track);border-radius:99px;position:relative;overflow:hidden}
+.tube i{position:absolute;inset:0 auto 0 0;border-radius:99px;background:linear-gradient(90deg,var(--cold),hsl(var(--h) 80% var(--heat-l)))}
+.deg{font-family:var(--f-display);font-weight:800;font-size:1.1rem;text-align:right;font-variant-numeric:tabular-nums;color:hsl(var(--h) 75% var(--heat-l))}
+.row.last{border-color:hsl(var(--h) 75% 50% / .55);box-shadow:0 0 0 3px hsl(var(--h) 80% 50% / .12)}
+.row.hint .w::after{display:inline-block;white-space:nowrap;content:"nápověda";font-size:.64rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-left:8px}
+.row.new{animation:pop .45s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes pop{0%{transform:translateY(-6px) scale(.97);opacity:0}100%{transform:none;opacity:1}}
+.example .row{border-style:dashed;opacity:.75}
+
+.win{scroll-margin-top:150px;background:var(--surface-solid);border:1px solid color-mix(in srgb,var(--hot) 45%,transparent);border-radius:24px;padding:24px;display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden;box-shadow:0 20px 50px -24px color-mix(in srgb,var(--hot) 70%,transparent)}
+.win::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 100% 0%,color-mix(in srgb,var(--hot) 18%,transparent),transparent 60%);pointer-events:none}
+.win h2{font-family:var(--f-display);font-weight:800;font-size:2rem;line-height:1.05;margin:0;letter-spacing:-.02em;text-wrap:balance}
+.win p{margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.88rem;padding:4px 11px;border-radius:99px;border:1px solid var(--line);background:var(--surface-2)}
+.chip b{font-family:var(--f-mono);font-weight:500;color:hsl(var(--h) 70% var(--heat-l));margin-right:6px;font-size:.74rem}
+.src{font-size:.8rem;color:var(--muted)}
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+details{color:var(--muted);font-size:.95rem;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 18px}
+details summary{cursor:pointer;font-weight:700;color:var(--fg)}
+details ul{padding-left:1.2em;margin:.6em 0 0;display:flex;flex-direction:column;gap:6px}
+
+.mystats{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.mystats h3{margin:0;font-family:var(--f-display);font-weight:800;font-size:1.15rem}
+.mynums{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.mynums div{display:flex;flex-direction:column}
+.mynums b{font-family:var(--f-display);font-weight:800;font-size:1.5rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.mynums span{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.dist{display:flex;flex-direction:column;gap:4px}
+.dist div{display:grid;grid-template-columns:4.2rem minmax(0,1fr) 2rem;gap:8px;align-items:center;font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+.dist i{display:block;height:12px;border-radius:99px;background:linear-gradient(90deg,var(--cold),var(--hot));min-width:4px}
+.dist div.me i{outline:2px solid var(--fg);outline-offset:1px}
+.dist em{font-style:normal;text-align:right;color:var(--fg)}
+@media (max-width:760px){.mynums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lvl{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border-radius:18px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);position:relative;overflow:hidden}
+.lvl b{font-family:var(--f-display);font-weight:800;font-size:1.05rem}
+.lvl span{font-size:.78rem;color:var(--muted);font-weight:400}
+.lvl[aria-selected="true"]{border-color:var(--hot);box-shadow:0 0 0 3px color-mix(in srgb,var(--hot) 16%,transparent)}
+.lvl .dots{position:absolute;top:10px;right:12px;display:flex;gap:3px}
+.lvl .dots i{width:7px;height:7px;border-radius:99px;background:var(--track)}
+.lvl[data-lvl="0"] .dots i:nth-child(-n+1),.lvl[data-lvl="1"] .dots i:nth-child(-n+2),.lvl[data-lvl="2"] .dots i:nth-child(-n+3){background:var(--hot)}
+.lvl.done span{color:var(--fg);font-weight:700}
+.sound{cursor:pointer;font-weight:600}
+#bum{position:fixed;left:0;top:0;width:min(46vw,300px);pointer-events:none;z-index:60;transform:translate(-50%,-50%) scale(0);opacity:0}
+#bum svg{width:100%;height:auto;display:block;overflow:visible}
+#bum polygon{fill:#ffd23f;stroke:#1a1208;stroke-width:5;stroke-linejoin:round}
+#bum text{font-family:var(--f-display);font-weight:800;font-size:54px;fill:#e5452f;stroke:#1a1208;stroke-width:3;paint-order:stroke;letter-spacing:-.02em}
+#bum.on{animation:bum 1.7s cubic-bezier(.2,1.6,.4,1) forwards}
+@keyframes bum{0%{transform:translate(-50%,-50%) scale(0) rotate(-20deg);opacity:1}18%{transform:translate(-50%,-50%) scale(1.15) rotate(6deg);opacity:1}30%{transform:translate(-50%,-50%) scale(1) rotate(-3deg)}75%{opacity:1;transform:translate(-50%,-50%) scale(1.05) rotate(0)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.3) rotate(4deg)}}
+.face .eye{fill:#fff}
+.face .pupil{fill:#1a1208}
+.face .line{fill:none;stroke:#1a1208;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+.face .mouthfill{fill:#5a0d0d;stroke:#1a1208;stroke-width:3;stroke-linejoin:round}
+.face .cheek{fill:#ff8a8a;opacity:.55}
+.face .sweat{fill:#9fd3ff;stroke:#2f74d0;stroke-width:1.2}
+.face .star{fill:#ffd23f;stroke:#1a1208;stroke-width:1.2}
+.face.chatter .mouthg{animation:chatter .12s steps(2) infinite}
+@keyframes chatter{0%{transform:translateX(-1.5px)}100%{transform:translateX(1.5px)}}
+.face.dizzy .stars{animation:spin 2.4s linear infinite;transform-origin:0 -40px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.face .sweat{animation:drip 1.6s ease-in infinite}
+@keyframes drip{0%{transform:translateY(0);opacity:0}15%{opacity:1}100%{transform:translateY(14px);opacity:0}}
+.face .blink{animation:blink 4.5s infinite;transform-box:fill-box;transform-origin:center}
+@keyframes blink{0%,93%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.frost .t-glass{stroke:#8fd0ff}
+@media (max-width:760px){.levels{gap:6px}.lvl{padding:8px 10px}.lvl b{font-size:.95rem}.lvl span{font-size:.7rem}.lvl .dots{top:8px;right:8px}}
+@media (prefers-reduced-motion:reduce){#bum.on{animation:none;opacity:0}.face *{animation:none!important}}
+
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.07;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+button{box-shadow:0 2px 0 color-mix(in srgb,var(--fg) 14%,transparent)}
+button:active:not(:disabled){transform:translateY(2px);box-shadow:none}
+button.primary{box-shadow:0 4px 0 color-mix(in srgb,var(--hot) 60%,#000),0 10px 24px -10px var(--hot)}
+button.primary:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--hot) 60%,#000)}
+.tube{height:10px;overflow:visible;margin-left:7px}
+.tube::before{content:"";position:absolute;left:-7px;top:50%;width:14px;height:14px;border-radius:50%;transform:translateY(-50%);background:hsl(var(--h) 80% var(--heat-l));box-shadow:0 0 10px hsl(var(--h) 85% 55% / .45)}
+.tube i{left:0;border-radius:0 99px 99px 0}
+.readout .big{text-shadow:0 0 28px hsl(var(--h,214) 85% 55% / .35)}
+.status{font-weight:700;color:var(--fg)}
+.status.err{color:var(--hot)}
+.confirm{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px dashed var(--hot);border-radius:18px;padding:14px 18px}
+.confirm p{margin:0;font-weight:700}
+.hintcount{font-family:var(--f-mono);font-size:.8rem;margin-left:6px;opacity:.75}
+/* teploměr 2 */
+.t-plate{fill:url(#plate);stroke:var(--plate-edge);stroke-width:2}
+.t-plate-in{fill:none;stroke:var(--plate-line);stroke-width:1.5;stroke-dasharray:2 5}
+.t-screw{fill:var(--screw);stroke:var(--plate-edge);stroke-width:1.5}
+.t-screw-cut{stroke:var(--plate-edge);stroke-width:1.6;stroke-linecap:round}
+.t-glass{fill:var(--glass);stroke:var(--glass-edge);stroke-width:2.5}
+.t-inner{fill:var(--glass)}
+.t-cap{fill:var(--metal);stroke:var(--plate-edge);stroke-width:1.5}
+.t-merc{fill:var(--merc-fill)}
+.t-mglow{fill:var(--merc-fill);opacity:calc(.25 + var(--heat,0) * .55)}
+.t-shine{fill:none;stroke:#ffffff;stroke-opacity:.8;stroke-width:3.5;stroke-linecap:round}
+.t-tick{stroke:var(--tick);stroke-width:1.6}
+.t-tick.major{stroke-width:2.6}
+.t-tick2{opacity:.45}
+.t-num{fill:var(--tick);font-family:var(--f-mono);font-size:15px;font-weight:600}
+.t-zone{fill:var(--muted);font-family:var(--f-display);font-size:13px;font-weight:800;letter-spacing:.02em}
+.t-mark{fill:var(--fg)}
+.t-marktext{fill:var(--fg);font-family:var(--f-mono);font-size:11px;font-weight:600}
+.t-crack{fill:none;stroke:var(--glass-edge);stroke-width:2;stroke-linecap:round;opacity:0}
+.t-frost{fill:none;stroke:#bfe6ff;stroke-width:1.6;stroke-linecap:round;opacity:0;transition:opacity .8s}
+.cold .t-frost{opacity:.95}
+.cold .t-glass{stroke:#8fd0ff}
+.t-flame{transition:opacity .5s}
+.t-flame-in{transform-box:fill-box;transform-origin:50% 100%}
+.t-flame-o{fill:#ff8a1f;filter:drop-shadow(0 0 6px #ff7a00)}
+.t-flame-i{fill:#ffe27a}
+.t-flame-in path{animation:flicker .18s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:50% 100%}
+.t-flame-i{animation-duration:.13s!important}
+@keyframes flicker{from{transform:scale(1,1) skewX(-3deg)}to{transform:scale(.92,1.08) skewX(3deg)}}
+.t-burner{fill:var(--metal);stroke:var(--plate-edge);stroke-width:1.5}
+.t-steam path{fill:none;stroke:var(--steam);stroke-width:3.5;stroke-linecap:round;opacity:0}
+.warm .t-steam path{animation:steam 1.8s ease-out infinite}
+@keyframes steam{0%{opacity:0;transform:translate(0,0)}25%{opacity:.75}100%{opacity:0;transform:translate(0,-12px) scale(1.1)}}
+.h .t-steam path{animation-name:steamh}
+@keyframes steamh{0%{opacity:0;transform:translate(0,0)}25%{opacity:.75}100%{opacity:0;transform:translate(12px,0) scale(1.1)}}
+.broken .t-crack{opacity:1}
+.broken .t-clip{clip-path:url(#brk)}
+.h .t-num{font-size:20px}
+.h .t-marktext{font-size:18px}
+.bubble{fill:#fff;fill-opacity:.6}
+.boil .t-glass,.boil .t-merc{animation:jitter .12s linear infinite}
+@keyframes jitter{0%{transform:translate(0,0)}25%{transform:translate(.8px,-.8px)}50%{transform:translate(-.8px,.8px)}75%{transform:translate(.8px,.8px)}100%{transform:translate(0,0)}}
+.thermo-col{overflow:hidden}
+.flake{position:absolute;top:0;color:#9fd6ff;pointer-events:none;line-height:1;font-style:normal}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:49;background:radial-gradient(circle at var(--fx,50%) var(--fy,30%),#fff7d6,color-mix(in srgb,var(--hot) 60%,transparent) 35%,transparent 70%);opacity:0}
+#flash.on{animation:flash .9s ease-out}
+@keyframes flash{0%{opacity:.95}100%{opacity:0}}
+
+@media (max-width:760px){
+  body{padding-block:12px 56px}
+  .layout{grid-template-columns:minmax(0,1fr);gap:16px}
+  .thermo-col{z-index:5;background:var(--surface-solid);flex-direction:row;gap:10px;padding:10px 14px;border-radius:22px;top:calc(8px + env(safe-area-inset-top, 0px))}
+  #thermo{flex:1;min-width:0}
+  .readout{min-width:76px}
+  .readout .big{font-size:1.8rem}
+  .readout .word{font-size:.62rem;padding:2px 8px}
+  .stat b{font-size:1.2rem}
+  .row{grid-template-columns:minmax(0,1fr) 52px 3.8rem;gap:8px;padding:10px 12px}
+  button.primary{padding:11px 18px}
+}
+
+@media (max-width:760px){
+  header{gap:10px}
+  h1{font-size:2.15rem}
+  .meta{flex-basis:100%;flex-wrap:nowrap;gap:5px}
+  .pill{padding:5px 9px;font-size:.68rem;white-space:nowrap}
+  .pill select{max-width:7.5rem}
+  .lede{font-size:.92rem}
+  main{gap:14px}
+  .win{padding:18px}
+  .win h2{font-size:1.4rem}
+  .thermo-col{box-shadow:0 -14px 0 2px var(--bg),var(--shadow)}
+  .readout .big{font-size:1.6rem}
+}
+@media (max-width:370px){ .pill .wide{display:none} }
+@media (prefers-reduced-motion:reduce){ .layout.shake{animation:none} .boil .t-body{animation:none} .row.new{animation:none} #flash.on{animation:none} }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+</head>
+<body>
+
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="flash" aria-hidden="true"></div>
+<div id="bum" aria-hidden="true"><svg viewBox="-110 -80 220 160"><polygon points="0,-78 18,-40 58,-62 44,-22 104,-24 56,4 96,40 40,30 46,74 10,42 -14,80 -26,40 -70,66 -52,24 -104,22 -58,-6 -92,-48 -40,-30 -38,-74 -10,-40" /><text x="0" y="16" text-anchor="middle">BUM!</text></svg></div>
+
+<div class="layout">
+  <aside class="thermo-col" aria-label="Teploměr">
+    <svg id="thermo" role="img" aria-label="Teploměr ukazuje nejteplejší tip"></svg>
+    <div class="readout"><span class="big" id="bigTemp">0 °C</span><span class="word" id="bigWord">zatím zima</span></div>
+  </aside>
+
+  <main>
+    <header>
+      <div class="brand"><h1>Teplo<span>měr</span></h1></div>
+      <div class="meta">
+        <span class="pill" id="dayLabel">Den 1</span>
+        <label class="pill"><span class="wide">Archiv</span> <select id="archive" aria-label="Vybrat den z archivu"></select></label>
+        <button type="button" class="pill sound" id="soundBtn" aria-pressed="true">Zvuk zap.</button>
+      </div>
+    </header>
+    <p class="theme-tag" id="themeTag" hidden></p>
+    <p class="bg-load" id="bgLoad" hidden></p>
+    <p class="lede">Každý den tři tajná slova: lehké, střední a těžké. Čím blíž je tvůj tip významem, tím víc stoupne rtuť. Při 100 °C teploměr bouchne.</p>
+
+    <div class="levels" id="levels" role="tablist" aria-label="Dnešní hádanky"></div>
+
+    <form id="form" autocomplete="off">
+      <input id="guess" type="text" placeholder="Napiš slovo…" aria-label="Tvůj tip" spellcheck="false" autocapitalize="off" disabled>
+      <button class="primary" id="go" type="submit" disabled>Hádat</button>
+    </form>
+    <div class="loading" id="loading">
+      <span id="loadText">Načítám slovník 63 000 slov…</span>
+      <span class="bar" aria-hidden="true"><i id="loadBar"></i></span>
+    </div>
+    <p class="status" id="status" role="status"></p>
+
+    <div class="win" id="win" hidden></div>
+    <div class="stats" id="stats"></div>
+
+    <section id="lastBox" hidden>
+      <p class="label">Poslední tip</p>
+      <ul class="rows" id="last"></ul>
+    </section>
+    <section id="listBox">
+      <p class="label" id="listLabel">Tvoje tipy</p>
+      <ul class="rows" id="list"></ul>
+    </section>
+
+    <div class="tools">
+      <button type="button" id="hintBtn" disabled>Nápověda</button>
+      <button type="button" id="giveBtn" disabled>Vzdát se</button>
+    </div>
+    <div class="confirm" id="giveConfirm" hidden>
+      <p id="giveText">Opravdu to chceš vzdát?</p>
+      <div class="tools"><button type="button" id="giveYes">Ano, ukaž slovo</button><button type="button" class="primary" id="giveNo">Ne, ještě to dám!</button></div>
+    </div>
+
+    <section class="mystats" id="myStats" aria-label="Tvoje statistiky"></section>
+
+    <details>
+      <summary>Jak se hraje</summary>
+      <ul>
+        <li>Piš jakékoli české slovo, klidně v jiném tvaru. Hra „kočky“ nebo „psa“ převede na „kočka“ a „pes“.</li>
+        <li>Všech 62 849 slov ve slovníku je seřazeno podle toho, jak blízko mají významem k tajnému slovu. Číslo za slovem je jeho pořadí, takže č. 2 je nejbližší slovo vůbec.</li>
+        <li>Rtuť ukazuje tvůj zatím nejlepší tip. Šipka na stupnici ukazuje ten poslední.</li>
+        <li>Teplota roste s pořadím: do 10. místa slovo hoří (80 °C a víc), do 50. přihořívá, do 300. je teplo, do 1 500. vlažné a dál je zima.</li>
+        <li>Blízkost slov počítají dohromady dva modely: fastText, natrénovaný na miliardách slov z českého internetu, a ConceptNet, který zná vztahy typu „pes je zvíře“. Nejbližší slova ke každému tajnému slovu jsou navíc seřazená ručně, aby horká zóna odpovídala tomu, jak slova vnímají lidé. Slovní rodiny jsou z Českého etymologického slovníku Jiřího Rejzka a tvary ze slovníku pro kontrolu pravopisu z LibreOffice.</li>
+        <li>Každý den o půlnoci přibudou tři nová slova: lehké (běžná věc), střední a těžké (vzácnější nebo abstraktní slovo). Starší dny najdeš v archivu.</li>
+      </ul>
+    </details>
+  </main>
+</div>
+
+<script src="tajna.js"></script>
+<script>
+const DIM=64, TOP=3000, FAR=99999, NCH=64, START=Date.UTC(2026,9,15);
+const $=id=>document.getElementById(id);
+const norm=s=>s.toLowerCase().trim().replace(/\s+/g," ");
+const bare=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"");
+const show=w=>w.replace(/_/g," ");
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function todayNum(){const d=new Date();const t=Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());return Math.max(1,Math.floor((t-START)/864e5)+1)}
+
+/* ---------- data ---------- */
+let CUR={hot:{},ban:{},asoc:{},vulg:[]};
+let WORDS=[],VEC=null,NORMS=null,N=0,INDEX=new Map(),BARE=new Map(),FORM=new Map(),KNOWN=new Set(),FAMILY=new Map();
+async function fetchText(url,from,to,cb){
+  const setP=cb||setLoad;
+  const res=await fetch(url); if(!res.ok) throw new Error(url+" "+res.status);
+  const total=Number(res.headers.get("content-length"))||0;
+  if(!res.body||!total){const t=await res.text();setP(to);return t}
+  const reader=res.body.getReader(),chunks=[];let got=0;
+  for(;;){const {done,value}=await reader.read();if(done)break;chunks.push(value);got+=value.length;setP(from+(to-from)*got/total)}
+  const all=new Uint8Array(got);let o=0;for(const c of chunks){all.set(c,o);o+=c.length}
+  return new TextDecoder().decode(all);
+}
+function setLoad(p){$("loadBar").style.width=Math.round(3+97*p)+"%"}
+async function loadDict(){
+  const w=await fetchText("slova.txt",0,1);
+  WORDS=w.split("\n"); N=WORDS.length;
+  WORDS.forEach((x,i)=>{if(!INDEX.has(x))INDEX.set(x,i);const b=bare(x);if(!BARE.has(b))BARE.set(b,i)});
+}
+// vzdálená slova (za 3 000. místem) se dopočítají na pozadí, hrát se dá hned
+async function loadVectors(){
+  const bg=$("bgLoad"); bg.hidden=false;
+  const pct=p=>{bg.textContent="Dopočítávám vzdálená slova… "+Math.round(p*100)+" %"};
+  let v1; try{ v1=await fetchText("vektory-64.txt",0,1,pct) }catch(e){ bg.textContent="Vzdálená slova se nepodařilo načíst, blízká fungují dál."; console.error(e); return }
+  const bin=atob(v1.trim()), vec=new Int8Array(bin.length);
+  for(let i=0;i<bin.length;i++){const c=bin.charCodeAt(i);vec[i]=c>127?c-256:c}
+  if(vec.length!==N*DIM){ bg.textContent="Vzdálená slova se nepodařilo načíst, blízká fungují dál."; return }
+  const nr=new Float32Array(N);
+  for(let i=0;i<N;i++){let s=0,o=i*DIM;for(let k=0;k<DIM;k++){const x=vec[o+k];s+=x*x}nr[i]=Math.sqrt(s)||1}
+  VEC=vec; NORMS=nr; bg.hidden=true;
+  if(R&&R.partial){ R=buildRanking(secretIdx,TOPS.get(WORDS[secretIdx])); render(); if(!st.solved) animateTo(bestTemp()) }
+}
+let formsDone=false,formsWait=null;const formsP=new Promise(r=>formsWait=r);
+async function loadExtras(){
+  try{
+    const t=await (await fetch("tvary.txt")).text();
+    t.split("\n").forEach((line,i)=>{ if(line) for(const f of line.split(" ")) if(!FORM.has(f)) FORM.set(f,i); });
+  }catch(e){console.warn(e)}
+  formsDone=true; formsWait();
+  await loadVectors();
+  try{
+    const f=await (await fetch("rodiny.json")).json();
+    for(const [ws,refs] of f) for(const w of ws) if(!FAMILY.has(w)) FAMILY.set(w,{words:ws,refs});
+    if(R&&(st.solved||st.gave)) renderWin();
+  }catch(e){console.warn(e)}
+  try{
+    const k=await (await fetch("znama.txt")).text();
+    k.split("\n").forEach(w=>{if(w){KNOWN.add(w);KNOWN.add(bare(w))}});
+  }catch(e){console.warn(e)}
+}
+// Přesné pořadí prvních 3 000 slov je pro každé tajné slovo předpočítané (včetně ruční kurátorské práce)
+// v souborech poradi/pXX.txt; vzdálenější slova řadí 64rozměrné vektory přímo v prohlížeči.
+const chunkOf=w=>{let x=0;for(const c of w)x=(x*31+c.charCodeAt(0))%1000003;return x%NCH};
+const TOPS=new Map(), CHUNKS=new Map();
+function loadChunk(k){
+  if(!CHUNKS.has(k)) CHUNKS.set(k,fetch("poradi/p"+String(k).padStart(2,"0")+".txt").then(r=>r.ok?r.text():"").then(t=>{
+    for(const line of t.split("\n")){const j=line.indexOf("\t");if(j<0)continue;const b=atob(line.slice(j+1)),u=new Uint16Array(b.length>>1);for(let i=0;i<u.length;i++)u[i]=b.charCodeAt(2*i)|b.charCodeAt(2*i+1)<<8;TOPS.set(line.slice(0,j),u)}
+  }).catch(()=>{}));
+  return CHUNKS.get(k);
+}
+async function rankingFor(secret){
+  await loadChunk(chunkOf(secret));
+  return buildRanking(INDEX.get(secret),TOPS.get(secret));
+}
+function buildRanking(si,top){
+  const order=new Uint32Array(N),rank=new Uint32Array(N);let r=0;
+  order[r]=si;rank[si]=++r;
+  if(top) for(const i of top){if(i<N&&!rank[i]){order[r]=i;rank[i]=++r}}
+  if(!VEC){ for(let i=0;i<N;i++) if(!rank[i]) rank[i]=FAR; return {order:order.subarray(0,r),rank,partial:true} }
+  const rest=[],sims=new Float32Array(N),o=si*DIM;
+  for(let i=0;i<N;i++){ if(rank[i]) continue;
+    let s=0,p=i*DIM;for(let k=0;k<DIM;k++)s+=VEC[p+k]*VEC[o+k];
+    s=s/(NORMS[i]*NORMS[si]); if(i>=15000) s-=0.1*Math.log1p((Math.min(i,60000)-15000)/2000);
+    sims[i]=s; rest.push(i) }
+  rest.sort((a,b)=>sims[b]-sims[a]);
+  for(const i of rest){order[r]=i;rank[i]=++r}
+  return {order,rank};
+}
+// pásma podle pořadí: 10. místo = 80 °C (hoří), 50. = 60 °C (přihořívá), 300. = 40 °C (teplo), 1 500. = 20 °C (vlažné); mezi body plynule
+const TEMP_PTS=[[1,100],[10,80],[50,60],[300,40],[1500,20],[8000,8],[64000,0]];
+function temp(r){
+  if(r<=1) return 100;
+  for(let k=1;k<TEMP_PTS.length;k++){const [r1,t1]=TEMP_PTS[k-1],[r2,t2]=TEMP_PTS[k];
+    if(r<=r2){const f=(Math.log(r)-Math.log(r1))/(Math.log(r2)-Math.log(r1));return Math.min(99,Math.round(t1+(t2-t1)*f))}}
+  return 0;
+}
+const hue=t=>Math.round(214-214*Math.min(t,100)/100);
+function label(t){if(t>=100)return"vře!";if(t>=80)return"hoří";if(t>=60)return"přihořívá";if(t>=40)return"teplo";if(t>=20)return"vlažné";return"zima"}
+function findWord(raw){
+  const n=norm(raw).replace(/ /g,"_");
+  if(INDEX.has(n)) return INDEX.get(n);
+  if(FORM.has(n)) return FORM.get(n);
+  const b=bare(n); if(BARE.has(b)) return BARE.get(b);
+  return -1;
+}
+function suggest(raw){
+  const n=bare(norm(raw)).replace(/ /g,"_");
+  for(let L=Math.min(n.length-1,8);L>=4;L--){const p=n.slice(0,L);
+    for(let i=0;i<Math.min(N,30000);i++){const w=WORDS[i];if(!w.includes("_")&&bare(w).startsWith(p)&&bare(w)!==n)return w}}
+  return null;
+}
+
+/* ---------- teploměr (SVG) ---------- */
+const SVGNS="http://www.w3.org/2000/svg";
+let TH=null; // geometrie a prvky
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.append(e);return e}
+/* ---------- teploměr 2: přístroj kreslený v místních souřadnicích ----------
+   osa a vede od středu baňky (a=0) ke špičce trubice (a=L), osa b je napříč.
+   Na počítači se celý přístroj otočí svisle, na mobilu leží vodorovně. Texty, obličej, plamen a pára
+   jsou v neotočené vrstvě a jejich polohu přepočítává funkce map(). */
+const RB=46, IR=34, TW=17, IW=8.5, L=430, A0=78, A1=L-26;
+function buildThermo(){
+  const svg=$("thermo"); svg.innerHTML="";
+  const vertical=!matchMedia("(max-width:760px)").matches;
+  const g={v:vertical};
+  // bMin/bMax: šířka štítku napříč trubicí, aby se na něj vešla čísla i popisky
+  // štítek obepíná celý přístroj: kahan pod baňkou, páru nad špičkou i hvězdičky po výbuchu
+  if(vertical){ g.ox=116; g.oy=522; g.vb="0 12 232 628"; g.bMin=-108; g.bMax=108; g.p0=-114; g.p1=L+74; }
+  else { g.ox=66; g.oy=56; g.vb="0 0 576 164"; g.bMin=-52; g.bMax=104; g.p0=-62; g.p1=L+74; }
+  g.map=(a,b)=>vertical?[g.ox+b,g.oy-a]:[g.ox+a,g.oy+b];
+  svg.setAttribute("viewBox",g.vb); svg.classList.toggle("h",!vertical);
+  const defs=el("defs",{},svg);
+  const lg=(id,stops,x2,y2,attrs={})=>{const G=el("linearGradient",Object.assign({id,x1:"0",y1:"0",x2:x2??"0",y2:y2??"1"},attrs),defs);stops.forEach(([o,c,op])=>el("stop",{offset:o,"stop-color":c,"stop-opacity":op??1},G));return G};
+  const rg=(id,stops,attrs={})=>{const G=el("radialGradient",Object.assign({id},attrs),defs);stops.forEach(([o,c,op])=>el("stop",{offset:o,"stop-color":c,"stop-opacity":op??1},G));return G};
+  // napříč trubicí (osa b) – v místních souřadnicích je to osa y
+  lg("glassX",[[0,"#ffffff",.75],[.18,"#ffffff",.15],[.55,"#ffffff",.02],[.82,"#9fb4c8",.18],[1,"#5b6f84",.45]]);
+  lg("mercX",[[0,"#000",.28],[.25,"#fff",.42],[.45,"#fff",.12],[1,"#000",.32]]);
+  rg("bulbG",[[0,"#ffffff",.85],[.25,"#ffffff",.25],[.7,"#ffffff",0],[1,"#000",.25]],{cx:".35",cy:".32",r:".75"});
+  rg("bulbM",[[0,"#fff",.55],[.3,"#fff",0],[1,"#000",.35]],{cx:".38",cy:".33",r:".8"});
+  lg("plate",[[0,"var(--plate-hi)"],[1,"var(--plate-lo)"]],"1","1");
+  lg("band",[[0,"#2f74d0"],[.35,"#2bb6a8"],[.55,"#7bc043"],[.75,"#f2a23a"],[1,"#e5452f"]],"1","0");
+  const fl=el("filter",{id:"glow",x:"-80%",y:"-80%",width:"260%",height:"260%"},defs); el("feGaussianBlur",{stdDeviation:"7"},fl);
+  const fs=el("filter",{id:"soft",x:"-20%",y:"-20%",width:"140%",height:"140%"},defs); el("feGaussianBlur",{stdDeviation:"1.4"},fs);
+  // ulomená špička po výbuchu
+  const cp=el("clipPath",{id:"brk"},defs);
+  el("path",{d:`M-200 -200 L${L-34} -200 L${L-34} ${-TW-6} L${L-44} -8 L${L-30} -2 L${L-46} 6 L${L-32} 12 L${L-40} ${TW+6} L${L-40} 300 L-200 300 Z`},cp);
+
+  const inst=el("g",{transform:vertical?`translate(${g.ox} ${g.oy}) rotate(-90)`:`translate(${g.ox} ${g.oy})`},svg);
+  // štítek se stupnicí a šroubky
+  const plate=el("g",{class:"plate"},inst);
+  const B0=g.bMin, B1=g.bMax;
+  const P0=g.p0, P1=g.p1;
+  el("rect",{x:P0,y:B0,width:P1-P0,height:B1-B0,rx:28,class:"t-plate"},plate);
+  el("rect",{x:P0+6,y:B0+6,width:P1-P0-12,height:B1-B0-12,rx:23,class:"t-plate-in"},plate);
+  [[P0+16,B0+14],[P0+16,B1-14],[P1-16,B0+14],[P1-16,B1-14]].forEach(([x,y])=>{el("circle",{cx:x,cy:y,r:5,class:"t-screw"},plate);el("path",{d:`M${x-3} ${y-1.5} l6 3`,class:"t-screw-cut"},plate)});
+  // barevný pás stupnice
+  el("rect",{x:A0,y:TW+9,width:A1-A0,height:6,rx:3,fill:"url(#band)",opacity:.9},plate);
+  for(let t=0;t<=100;t+=5){
+    const a=A0+(A1-A0)*t/100, major=t%10===0;
+    el("line",{x1:a,x2:a,y1:TW+17,y2:TW+17+(major?14:8),class:"t-tick"+(major?" major":"")},plate);
+    el("line",{x1:a,x2:a,y1:-TW-5,y2:-TW-5-(major?9:5),class:"t-tick t-tick2"+(major?" major":"")},plate);
+  }
+  // námraza (viditelná v zimě)
+  g.frost=el("g",{class:"t-frost"},inst);
+  for(let k=0;k<9;k++){const a=40+k*44+(k%2)*14, b=(k%2?-1:1)*(TW-5);
+    const f=el("g",{transform:`translate(${a} ${b}) rotate(${k*23})`},g.frost);
+    for(let r=0;r<3;r++) el("path",{d:"M-6 0 H6 M-3 -1.5 l-2 -2.5 M3 -1.5 l2 -2.5 M-3 1.5 l-2 2.5 M3 1.5 l2 2.5",transform:`rotate(${r*60})`},f);}
+  // sklo
+  const glass=el("g",{class:"t-clip"},inst);
+  el("rect",{x:0,y:-TW,width:L,height:TW*2,rx:TW,class:"t-glass"},glass);
+  el("circle",{cx:0,cy:0,r:RB,class:"t-glass"},glass);
+  el("rect",{x:4,y:-TW+1.5,width:RB,height:TW*2-3,class:"t-inner"},glass);
+  // kovová záklopka na špičce
+  el("rect",{x:L-6,y:-TW+3,width:16,height:TW*2-6,rx:4,class:"t-cap"},glass);
+  // rtuť
+  const merc=el("g",{class:"t-clip"},inst);
+  g.mglow=el("rect",{x:0,y:-IW-3,width:10,height:IW*2+6,rx:IW+3,class:"t-mglow",filter:"url(#glow)"},merc);
+  g.bulbGlow=el("circle",{cx:0,cy:0,r:IR+6,class:"t-mglow",filter:"url(#glow)"},merc);
+  g.bulb=el("circle",{cx:0,cy:0,r:IR,class:"t-merc"},merc);
+  el("circle",{cx:0,cy:0,r:IR,fill:"url(#bulbM)"},merc);
+  g.col=el("rect",{x:0,y:-IW,width:10,height:IW*2,rx:IW,class:"t-merc"},merc);
+  g.colShade=el("rect",{x:0,y:-IW,width:10,height:IW*2,rx:IW,fill:"url(#mercX)"},merc);
+  g.bubbles=el("g",{},merc);
+  // lesk skla navrch
+  const shine=el("g",{class:"t-clip",style:"pointer-events:none"},inst);
+  el("rect",{x:RB-6,y:-TW,width:L-RB+4,height:TW*2,rx:TW,fill:"url(#glassX)"},shine);
+  el("circle",{cx:0,cy:0,r:RB,fill:"url(#bulbG)"},shine);
+  el("path",{d:`M${RB+6} ${-TW+5} H${L-24}`,class:"t-shine"},shine);
+  el("path",{d:`M${-RB*.62} ${-RB*.42} A ${RB*.74} ${RB*.74} 0 0 1 ${-RB*.1} ${-RB*.74}`,class:"t-shine"},shine);
+  // praskliny
+  el("path",{class:"t-crack",d:`M${L-40} -9 l-14 -3 l-10 5 l-18 -2 M${L-38} 7 l-16 4 l-9 -5 l-22 3 l-14 -2 M${L-44} 0 l-26 1`},inst);
+
+  // ----- neotočená vrstva -----
+  const ui=el("g",{},svg);
+  for(let t=0;t<=100;t+=20){
+    const a=A0+(A1-A0)*t/100;
+    const [x,y]=g.map(a,TW+44);
+    el("text",{class:"t-num",x,y:vertical?y+5:y+6,"text-anchor":vertical?"start":"middle"},ui).textContent=t+"°";
+  }
+  if(vertical){
+    [[0,"zima"],[20,"vlažné"],[40,"teplo"],[60,"přihořívá"],[80,"hoří"]].forEach(([t,l])=>{
+      const [x,y]=g.map(A0+(A1-A0)*(t+10)/100,-TW-22);
+      el("text",{class:"t-zone",x,y:y+4,"text-anchor":"end"},ui).textContent=l;});
+  }
+  // plamen kahanu pod baňkou
+  const [fx,fy]=g.map(0,0);
+  g.flame=el("g",{class:"t-flame",transform:`translate(${fx} ${fy+RB+(vertical?10:4)})`},ui);
+  el("rect",{x:-14,y:30,width:28,height:10,rx:3,class:"t-burner"},g.flame);
+  g.flameIn=el("g",{class:"t-flame-in"},g.flame);
+  el("path",{d:"M0 -22 C 12 -6 13 8 0 30 C -13 8 -12 -6 0 -22 Z",class:"t-flame-o"},g.flameIn);
+  el("path",{d:"M0 -6 C 6 4 6 14 0 28 C -6 14 -6 4 0 -6 Z",class:"t-flame-i"},g.flameIn);
+  // pára nad trubicí
+  const [sx,sy]=g.map(L+8,0);
+  g.steam=el("g",{class:"t-steam",transform:`translate(${sx} ${sy})`},ui);
+  for(let k=0;k<3;k++) el("path",{d:vertical?"M0 0 c-6 -6 6 -10 0 -16 c-6 -6 6 -10 0 -16":"M0 0 c6 -6 10 6 16 0 c6 -6 10 6 16 0",style:`animation-delay:${k*.55}s`,transform:vertical?`translate(${(k-1)*10} -6)`:`translate(4 ${(k-1)*10})`},g.steam);
+  // obličej na baňce
+  g.face=el("g",{class:"face",transform:`translate(${fx} ${fy}) scale(${IR/34})`},ui);
+  // značka posledního tipu
+  g.mark=el("g",{opacity:"0"},ui);
+  el("path",{class:"t-mark",d:vertical?"M0 0 l-12 -8 v16 z":"M0 0 l-8 -12 h16 z"},g.mark);
+  g.markText=el("text",{class:"t-marktext",x:vertical?-16:0,y:vertical?-12:-16,"text-anchor":vertical?"end":"middle"},g.mark);
+  const [tx,ty]=g.map(L,0); g.tipX=tx; g.tipY=ty;
+  g.inst=inst;
+  TH=g; faceBase=null;
+  drawLevel(curLevel,true); drawMark(); setBroken(brokenState); setFace(true);
+}
+const aOf=t=>A0+(A1-A0)*Math.max(0,Math.min(100,t))/100;
+let curLevel=0, targetLevel=0, anim=null, brokenState=false, lastMark=null;
+function mercColor(t){return `hsl(${hue(t)} 85% 52%)`}
+function drawLevel(t){
+  if(!TH) return;
+  t=Math.max(0,Math.min(100,t||0));
+  const g=TH, a=aOf(t);
+  [g.col,g.colShade].forEach(r=>r.setAttribute("width",a));
+  g.mglow.setAttribute("width",a+6);
+  const svg=$("thermo");
+  svg.style.setProperty("--merc-fill",mercColor(t));
+  svg.style.setProperty("--heat",(t/100).toFixed(3));
+  svg.classList.toggle("cold",t<20&&!brokenState);
+  svg.classList.toggle("warm",t>=60&&!brokenState);
+  svg.classList.toggle("hot",t>=80&&!brokenState);
+  g.flameIn.setAttribute("transform",`scale(${(.25+.85*Math.max(0,(t-35)/65)).toFixed(3)})`);
+  g.flame.style.opacity=t>=40&&!brokenState?1:0;
+  document.documentElement.style.setProperty("--glow-h",hue(t)); document.documentElement.style.setProperty("--glow-a",(0.10+0.24*t/100).toFixed(3));
+  const r=Math.round(t);
+  $("bigTemp").textContent=r+" °C"; $("bigTemp").style.setProperty("--h",hue(r));
+  $("bigWord").textContent=r===0&&!(st&&st.g.length)?"zatím zima":label(r);
+  setBubbles(t); setSnow(t); setFace();
+}
+function animateTo(t,done){
+  targetLevel=t; if(anim) cancelAnimationFrame(anim);
+  if(reduce){curLevel=t;drawLevel(t);done&&done();return}
+  const from=curLevel, dur=700+Math.abs(t-from)*14, t0=performance.now();
+  const step=now=>{const k=Math.min(1,(now-t0)/dur), e=k<1?1-Math.pow(2,-10*k)*Math.cos(k*9):1; // pružné dosednutí rtuti
+    curLevel=from+(t-from)*Math.min(1.04,e); drawLevel(curLevel);
+    if(k<1) anim=requestAnimationFrame(step); else {curLevel=t;drawLevel(t);anim=null;done&&done()}};
+  anim=requestAnimationFrame(step);
+}
+function drawMark(){
+  if(!TH) return; const g=TH;
+  if(lastMark==null){g.mark.setAttribute("opacity","0");return}
+  const [x,y]=g.map(aOf(lastMark.t),g.v?-TW-6:-TW-6);
+  g.mark.setAttribute("opacity","1");
+  g.mark.setAttribute("transform",`translate(${x} ${y})`);
+  g.markText.textContent=lastMark.t+"°";
+  g.markText.setAttribute("opacity","0");
+}
+let bubbleTimer=null;
+function setBubbles(t){
+  if(!TH) return;
+  $("thermo").classList.toggle("boil", t>=88 && !brokenState && !reduce);
+  if(t>=65 && !brokenState && !reduce){ if(!bubbleTimer) bubbleTimer=setInterval(spawnBubble,220) }
+  else if(bubbleTimer){clearInterval(bubbleTimer);bubbleTimer=null}
+}
+function spawnBubble(){
+  const g=TH; if(!g) return;
+  const c=el("circle",{class:"bubble",cx:-IR*.4+Math.random()*IR*.5,cy:(Math.random()-.5)*IW*1.2,r:1.6+Math.random()*2.6},g.bubbles);
+  c.animate([{transform:"translateX(0)",opacity:.95},{transform:`translateX(${aOf(curLevel)}px)`,opacity:0}],{duration:1200+Math.random()*900,easing:"ease-in"}).onfinish=()=>c.remove();
+}
+/* sněžení kolem přístroje, když je zima */
+let snowTimer=null;
+function setSnow(t){
+  const on=t<20&&!brokenState&&!reduce&&st&&st.g.length>0;
+  if(on&&!snowTimer) snowTimer=setInterval(spawnFlake,380);
+  if(!on&&snowTimer){clearInterval(snowTimer);snowTimer=null}
+}
+function spawnFlake(){
+  const col=document.querySelector(".thermo-col"); if(!col) return;
+  const f=document.createElement("i"); f.className="flake"; f.innerHTML='<svg viewBox="-10 -10 20 20" width="1em" height="1em"><g stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M0 -9V9M-7.8 -4.5L7.8 4.5M-7.8 4.5L7.8 -4.5M-2.5 -7L0 -4.5L2.5 -7M-2.5 7L0 4.5L2.5 7"/></g></svg>';
+  f.style.left=(Math.random()*100)+"%"; f.style.fontSize=(8+Math.random()*10)+"px";
+  col.append(f);
+  f.animate([{transform:"translateY(-10px) rotate(0)",opacity:0},{opacity:.9,offset:.15},{transform:`translateY(${col.clientHeight}px) rotate(${Math.random()*360}deg)`,opacity:0}],{duration:3500+Math.random()*2500,easing:"linear"}).onfinish=()=>f.remove();
+}
+function setBroken(b){ brokenState=b; $("thermo").classList.toggle("broken",b); if(b){setBubbles(0);setSnow(100)} setFace(true); if(TH) TH.flame.style.opacity=0 }
+
+let resizeT=null; matchMedia("(max-width:760px)").addEventListener("change",()=>buildThermo());
+
+
+/* ---------- obličej teploměru ---------- */
+let faceBase=null;
+function faceState(){
+  if(brokenState) return "dizzy";
+  const t=Math.round(curLevel);
+  if(t>=80) return "panic"; if(t>=60) return "sweat"; if(t>=40) return "smile"; if(t>=20) return "meh"; return "cold";
+}
+function setFace(force){
+  if(!TH||!TH.face) return;
+  const f=faceState(); if(!force&&f===faceBase) return; faceBase=f;
+  const g=TH.face; g.innerHTML=""; g.setAttribute("class","face"+(f==="cold"&&!reduce?" chatter":"")+(f==="dizzy"?" dizzy":""));
+  $("thermo").classList.toggle("frost",f==="cold");
+  const eye=(x,big)=>{const e=el("g",{class:"blink"},g);el("circle",{class:"eye",cx:x,cy:-6,r:big?9:7},e);el("circle",{class:"pupil",cx:x+(big?0:1),cy:big?-6:-5,r:big?3:3.4},e)};
+  if(f==="dizzy"){
+    [-11,11].forEach(x=>el("path",{class:"line",d:`M${x-5} -11 l10 10 M${x+5} -11 l-10 10`},g));
+    el("path",{class:"line",d:"M-12 14 q4 -5 8 0 t8 0 t8 0"},g);
+    const st=el("g",{class:"stars"},g);
+    [[-20,-40],[18,-44],[0,-52]].forEach(([x,y])=>el("path",{class:"star",d:`M${x} ${y-6} l2 4.5 5 .5 -3.8 3.3 1.2 5 -4.4 -2.7 -4.4 2.7 1.2 -5 -3.8 -3.3 5 -.5z`},st));
+    return;
+  }
+  if(f==="cold"){
+    [-11,11].forEach(x=>el("path",{class:"line",d:`M${x-6} -6 q6 4 12 0`},g));
+    const m=el("g",{class:"mouthg"},g);
+    el("path",{class:"line",d:"M-13 13 l4 -4 4 4 4 -4 4 4 4 -4 4 4"},m);
+    el("path",{class:"line",d:"M-17 -18 l-4 -6 M17 -18 l4 -6",style:"stroke:#8fd0ff"},g);
+    return;
+  }
+  eye(-11,f==="panic"); eye(11,f==="panic");
+  if(f==="meh"){ el("path",{class:"line",d:"M-10 13 h20"},g); el("path",{class:"line",d:"M-17 -17 h10 M7 -17 h10"},g); }
+  if(f==="smile"){ el("path",{class:"line",d:"M-12 9 q12 12 24 0"},g); el("circle",{class:"cheek",cx:-21,cy:6,r:5},g); el("circle",{class:"cheek",cx:21,cy:6,r:5},g); }
+  if(f==="sweat"){ el("path",{class:"mouthfill",d:"M-13 8 q13 16 26 0 z"},g); el("circle",{class:"cheek",cx:-21,cy:6,r:5},g); el("circle",{class:"cheek",cx:21,cy:6,r:5},g);
+    el("path",{class:"sweat",d:"M22 -22 q5 8 0 11 q-5 -3 0 -11z"},g); }
+  if(f==="panic"){ el("ellipse",{class:"mouthfill",cx:0,cy:14,rx:7,ry:9},g); el("path",{class:"line",d:"M-19 -20 l9 -4 M19 -20 l-9 -4"},g);
+    el("path",{class:"sweat",d:"M23 -24 q5 8 0 11 q-5 -3 0 -11z"},g); el("path",{class:"sweat",d:"M-25 -14 q5 8 0 11 q-5 -3 0 -11z",style:"animation-delay:.7s"},g); }
+}
+
+/* ---------- vtipné hlášky ---------- */
+const QUIPS={
+  zima:["Brr, tady mrznou i tučňáci.","Ledová sprcha.","Teploměr si obléká svetr.","Tady by se dalo bruslit.","Studené jako čumák sněhuláka.","Zima jak v psírně.","Teploměru cvakají zuby."],
+  vlažné:["Vlažné jako čaj, na který jsi zapomněl.","Trochu to hřeje, ale jen trochu.","Jako lavička v březnu.","Ještě to chce přiložit pod kotel.","Teploměr zívá."],
+  teplo:["Už to začíná hřát.","Příjemně teplo, jen tak dál.","Teploměr si sundal šálu.","Dalo by se opalovat.","Tady už je jaro."],
+  přihořívá:["Přihořívá! Cítím kouř.","Teploměr se začíná potit.","Horká stopa!","Už jsi skoro tam.","Někdo otevřete okno!"],
+  hoří:["Hoří! Volejte hasiče!","Rtuť šplhá jako o závod!","Ještě kousek a bouchne to.","Teploměr se třese strachy.","Tohle už pálí jak pekáč."]
+};
+let lastQuip="";
+function quip(t){const L=QUIPS[label(t)]||QUIPS.zima;let q;do{q=L[Math.floor(Math.random()*L.length)]}while(L.length>1&&q===lastQuip);lastQuip=q;return q}
+
+/* ---------- zvuky (vznikají až po kliknutí hráče) ---------- */
+let SOUND=true; try{SOUND=localStorage.getItem("teplomer-zvuk")!=="0"}catch(e){}
+let AC=null;
+function ac(){ if(!SOUND) return null; try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==="suspended") AC.resume(); }catch(e){AC=null} return AC }
+function beep(t){
+  const a=ac(); if(!a) return;
+  const o=a.createOscillator(), g=a.createGain(), n=a.currentTime;
+  o.type="sine"; o.frequency.setValueAtTime(220+t*6,n); o.frequency.exponentialRampToValueAtTime(260+t*9,n+.12);
+  g.gain.setValueAtTime(.0001,n); g.gain.exponentialRampToValueAtTime(.12,n+.02); g.gain.exponentialRampToValueAtTime(.0001,n+.22);
+  o.connect(g).connect(a.destination); o.start(n); o.stop(n+.25);
+}
+function boom(){
+  const a=ac(); if(!a) return;
+  const n=a.currentTime, len=1.4, buf=a.createBuffer(1,a.sampleRate*len,a.sampleRate), d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,2.2);
+  const src=a.createBufferSource(); src.buffer=buf;
+  const lp=a.createBiquadFilter(); lp.type="lowpass"; lp.frequency.setValueAtTime(2400,n); lp.frequency.exponentialRampToValueAtTime(90,n+1.1);
+  const g=a.createGain(); g.gain.setValueAtTime(.9,n); g.gain.exponentialRampToValueAtTime(.001,n+len);
+  src.connect(lp).connect(g).connect(a.destination); src.start(n);
+  const o=a.createOscillator(), og=a.createGain(); o.type="sine"; o.frequency.setValueAtTime(120,n); o.frequency.exponentialRampToValueAtTime(35,n+.6);
+  og.gain.setValueAtTime(.7,n); og.gain.exponentialRampToValueAtTime(.001,n+.7); o.connect(og).connect(a.destination); o.start(n); o.stop(n+.75);
+}
+function renderSoundBtn(){const b=$("soundBtn");b.textContent=SOUND?"Zvuk zap.":"Zvuk vyp.";b.setAttribute("aria-pressed",String(SOUND))}
+
+/* ---------- výbuch ---------- */
+function explode(){
+  const g=TH, svg=$("thermo");
+  const pt=svg.createSVGPoint(); pt.x=g.tipX; pt.y=g.tipY;
+  const sp=pt.matrixTransform(svg.getScreenCTM());
+  const fl=$("flash"); fl.style.setProperty("--fx",sp.x+"px"); fl.style.setProperty("--fy",sp.y+"px");
+  fl.classList.remove("on"); void fl.offsetWidth; fl.classList.add("on");
+  const lay=document.querySelector(".layout"); lay.classList.remove("shake"); void lay.offsetWidth; lay.classList.add("shake");
+  setBroken(true);
+  boom();
+  const bm=$("bum"); bm.style.left=Math.min(innerWidth-120,Math.max(120,sp.x+60))+"px"; bm.style.top=Math.max(90,sp.y)+"px";
+  bm.classList.remove("on"); void bm.offsetWidth; bm.classList.add("on");
+  if(reduce) return;
+  const cv=$("fx"), dpr=Math.min(2,devicePixelRatio||1);
+  cv.width=innerWidth*dpr; cv.height=innerHeight*dpr; const ctx=cv.getContext("2d"); ctx.scale(dpr,dpr);
+  const parts=[];
+  for(let i=0;i<70;i++){const a=Math.random()*Math.PI*2, s=3+Math.random()*9;
+    parts.push({k:"drop",x:sp.x,y:sp.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-5,r:2+Math.random()*5,h:Math.random()*30,life:1});}
+  for(let i=0;i<26;i++){const a=Math.random()*Math.PI*2, s=4+Math.random()*8;
+    parts.push({k:"shard",x:sp.x,y:sp.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-4,r:4+Math.random()*9,rot:Math.random()*6,vr:(Math.random()-.5)*.4,life:1});}
+  const CONF=["#e5452f","#ffd23f","#2f74d0","#2bb673","#ff7ac8","#8b5cf6"];
+  for(let i=0;i<90;i++){const a=-Math.PI/2+(Math.random()-.5)*2.4, s=6+Math.random()*10;
+    parts.push({k:"conf",x:sp.x,y:sp.y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,w:5+Math.random()*6,h:3+Math.random()*4,rot:Math.random()*6,vr:(Math.random()-.5)*.5,c:CONF[i%CONF.length],life:1.6});}
+  for(let i=0;i<14;i++){parts.push({k:"steam",x:sp.x+(Math.random()-.5)*30,y:sp.y,vx:(Math.random()-.5)*1.2,vy:-1-Math.random()*2,r:10+Math.random()*16,life:1});}
+  const dark=matchMedia("(prefers-color-scheme: dark)").matches||document.documentElement.dataset.theme==="dark";
+  let last=performance.now();
+  const tick=now=>{const dt=Math.min(2,(now-last)/16.7); last=now;
+    ctx.clearRect(0,0,innerWidth,innerHeight); let alive=0;
+    for(const p of parts){ if(p.life<=0) continue; alive++;
+      if(p.k==="steam"){p.x+=p.vx*dt;p.y+=p.vy*dt;p.r+=.5*dt;p.life-=.012*dt;
+        ctx.fillStyle=`rgba(${dark?"200,210,225":"170,180,195"},${.28*p.life})`;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();continue}
+      if(p.k==="conf"){p.vy+=.18*dt;p.vx*=.985;p.vy*=.985;p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.vr*dt;p.life-=.006*dt;
+        ctx.globalAlpha=Math.max(0,Math.min(1,p.life));ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.scale(1,Math.cos(p.rot*2));ctx.fillStyle=p.c;ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);ctx.restore();ctx.globalAlpha=1;continue}
+      p.vy+=.32*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.99; p.life-=(p.k==="drop"?.009:.011)*dt;
+      if(p.y>innerHeight-6&&p.vy>0){p.vy*=-.35;p.vx*=.7;p.y=innerHeight-6}
+      ctx.globalAlpha=Math.max(0,Math.min(1,p.life*1.4));
+      if(p.k==="drop"){ctx.fillStyle=`hsl(${p.h} 85% 52%)`;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,.55)";ctx.beginPath();ctx.arc(p.x-p.r*.3,p.y-p.r*.3,p.r*.3,0,7);ctx.fill()}
+      else {p.rot+=p.vr*dt;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+        ctx.fillStyle=dark?"rgba(190,215,240,.55)":"rgba(150,180,210,.5)";ctx.strokeStyle=dark?"rgba(230,240,255,.9)":"rgba(90,120,150,.8)";ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(0,-p.r);ctx.lineTo(p.r*.7,p.r*.6);ctx.lineTo(-p.r*.5,p.r*.4);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore()}
+      ctx.globalAlpha=1; }
+    if(alive) requestAnimationFrame(tick); else ctx.clearRect(0,0,innerWidth,innerHeight);
+  };
+  requestAnimationFrame(tick);
+}
+
+/* ---------- stav hry ---------- */
+const TODAY=todayNum();
+const LEVELS=["Lehká","Střední","Těžká"];
+const MAXDAY=TODAY;
+let num=MAXDAY, slot=0, secretIdx=-1, R=null, st=null;
+const key=(d,s)=>"teplomer3-"+d+"-"+s;
+const dayTheme=d=>typeof themeOf==="function"?themeOf(START+(d-1)*864e5):null;
+const secretOf=(d,s)=>{const t=dayTheme(d);return t?t[1][s]:POOLS[s][(d-1)%POOLS[s].length]};
+function load(d,s){
+  for(const k of [key(d,s)].concat(d===1&&s===0?["teplomer3-1"]:[])){
+    try{const v=JSON.parse(localStorage.getItem(k));if(v&&Array.isArray(v.g))return v}catch(e){}
+  }
+  return {g:[],solved:false,gave:false,hints:0,last:null};
+}
+function save(){try{localStorage.setItem(key(num,slot),JSON.stringify(st))}catch(e){}}
+function renderLevels(){
+  const box=$("levels"); box.innerHTML="";
+  LEVELS.forEach((name,k)=>{
+    const v=k===slot?st:load(num,k);
+    const b=document.createElement("button");b.type="button";b.className="lvl"+(v.solved?" done":"");b.dataset.lvl=k;
+    b.setAttribute("role","tab");b.setAttribute("aria-selected",String(k===slot));
+    const t=document.createElement("b");t.textContent=name;
+    const sub=document.createElement("span");
+    const tries=v.g.filter(g=>!g.hint).length;
+    sub.textContent=v.solved?`Uhodnuto na ${tries}`:v.gave?"Vzdáno":tries?`${tries} ${tries===1?"pokus":tries<5?"pokusy":"pokusů"}`:"Nezačato";
+    const dots=document.createElement("span");dots.className="dots";dots.innerHTML="<i></i><i></i><i></i>";
+    b.append(t,sub,dots);b.onclick=()=>{if(k!==slot)open(num,k)};box.append(b);
+  });
+}
+const rankOf=w=>R.rank[INDEX.get(w)];
+function setStatus(text,err,sugg){const s=$("status");s.textContent=text;s.classList.toggle("err",!!err);
+  if(sugg){const b=document.createElement("button");b.type="button";b.textContent=show(sugg)+"?";b.onclick=()=>submit(sugg);s.append(" Myslel jsi ",b)}}
+function rowEl(word,rank,o={}){
+  const t=temp(rank),li=document.createElement("li");
+  li.className="row"+(o.last?" last":"")+(o.hint?" hint":"")+(o.fresh?" new":"");
+  li.style.setProperty("--h",hue(t));
+  const w=document.createElement("span");w.className="w";w.textContent=show(word);
+  if(o.typed&&bare(o.typed)!==bare(word)){const em=document.createElement("em");em.textContent="z „"+o.typed+"“";w.append(em)}
+  if(rank){const sm=document.createElement("small");sm.textContent=rank===FAR?"za č. 3 000":"č. "+rank.toLocaleString("cs-CZ");w.append(sm)}
+  const tube=document.createElement("span");tube.className="tube";tube.setAttribute("aria-hidden","true");
+  const f=document.createElement("i");f.style.width=Math.max(3,t)+"%";tube.append(f);
+  const d=document.createElement("span");d.className="deg";d.textContent=rank===FAR?"<15\u00a0°C":t+"\u00a0°C";d.title=rank===FAR?"zima, přesné místo se dopočítává":label(t);
+  li.append(w,tube,d);return li;
+}
+function bestTemp(){ if(!R||!st.g.length) return 0; return temp(Math.min(...st.g.map(g=>rankOf(g.w)))) }
+function render(fresh){
+  $("dayLabel").innerHTML="";$("dayLabel").append("Den ");{const b=document.createElement("b");b.textContent=num;$("dayLabel").append(b)};if(num===MAXDAY)$("dayLabel").append(" · dnes");{const th=dayTheme(num);$("themeTag").hidden=!th;if(th)$("themeTag").textContent="Tematický den: "+th[0]}
+  renderLevels();
+  const ready=!!R, done=st.solved||st.gave;
+  $("guess").disabled=!ready||done; $("go").disabled=!ready||done;
+  $("hintBtn").disabled=!ready||done||st.hints>=MAXHINT; $("giveBtn").disabled=!ready||done; $("giveConfirm").hidden=true;
+  $("hintBtn").hidden=done; $("giveBtn").hidden=done;
+  $("hintBtn").innerHTML="";$("hintBtn").append("Nápověda");{const c=document.createElement("span");c.className="hintcount";c.textContent=`${Math.max(0,MAXHINT-st.hints)}/${MAXHINT}`;$("hintBtn").append(c)}
+  const gs=ready?st.g.map(g=>({...g,rank:rankOf(g.w)})):[];
+  const best=gs.reduce((m,g)=>Math.min(m,g.rank),Infinity);
+  $("stats").innerHTML="";
+  [["Pokusy",st.g.filter(g=>!g.hint).length],["Nápovědy",st.hints],["Nejblíž",best===FAR?"za č. 3 000":isFinite(best)?"č. "+best.toLocaleString("cs-CZ"):"—"]].forEach(([k,v])=>{
+    const d=document.createElement("div");d.className="stat";const l=document.createElement("span");l.textContent=k;const b=document.createElement("b");b.textContent=v;d.append(l,b);$("stats").append(d)});
+  const last=gs.find(g=>g.w===st.last);
+  $("lastBox").hidden=!last||done; $("last").innerHTML="";
+  if(last) $("last").append(rowEl(last.w,last.rank,{last:true,hint:last.hint,typed:last.typed,fresh}));
+  lastMark=last?{t:temp(last.rank)}:null; drawMark();
+  const list=$("list"); list.innerHTML="";
+  $("listBox").classList.toggle("example",gs.length===0);
+  if(!gs.length){
+    $("listLabel").textContent="Příklad: takhle vypadají tipy, když je tajné slovo „pes“";
+    [["pejsek",2],["kočka",3],["štěně",5],["kost",13],["vodítko",19],["zahrada",347],["počítač",1238]].forEach(([w,r])=>list.append(rowEl(w,r)));
+  } else {
+    $("listLabel").textContent="Tvoje tipy od nejteplejšího";
+    gs.sort((a,b)=>a.rank-b.rank).forEach(g=>list.append(rowEl(g.w,g.rank,{last:g.w===st.last&&!done,hint:g.hint,typed:g.typed})));
+  }
+  renderWin();
+}
+function renderWin(){
+  renderMyStats();
+  const win=$("win"),done=st.solved||st.gave; win.innerHTML=""; win.hidden=!(R&&done);
+  if(!(R&&done)) return;
+  const secret=WORDS[secretIdx], tries=st.g.filter(g=>!g.hint).length;
+  const h=document.createElement("h2");
+  h.textContent=st.solved?`BUM! Teploměr to nevydržel. Tajné slovo je „${show(secret)}“.`:`Teploměr si oddechl. Tajné slovo bylo „${show(secret)}“.`;
+  const p=document.createElement("p");
+  const verdict=!st.solved?"Nevadí, zítra jsou tu tři nová slova.":tries<=3?"To byl zásah jako blesk!":tries<=10?"Výborná práce, detektive.":tries<=30?"Pěkně jsi to dohřál.":tries<=80?"Vytrvalost se vyplácí.":"Nakonec to bouchlo. Teploměr ti tleská, i když s obvazem.";
+  p.textContent=st.solved?`Uhodnuto na ${tries} ${tries===1?"pokus":tries<5?"pokusy":"pokusů"}${st.hints?` s ${st.hints} ${st.hints===1?"nápovědou":"nápovědami"}`:""}. ${verdict}`:verdict;
+  const lab=document.createElement("p");lab.className="label";lab.textContent="Nejbližší slova";
+  const chips=document.createElement("div");chips.className="chips";
+  for(let r=2;r<=41;r++){const w=WORDS[R.order[r-1]];const c=document.createElement("span");c.className="chip";c.style.setProperty("--h",hue(temp(r)));
+    const b=document.createElement("b");b.textContent=r;c.append(b,show(w));chips.append(c)}
+  win.append(h,p,lab,chips);
+  const fam=FAMILY.get(secret);
+  if(fam){
+    const others=fam.words.filter(w=>w!==secret);
+    const grp=(t,l)=>{if(!l.length)return;const a=document.createElement("p");a.className="label";a.textContent=t;
+      const c=document.createElement("div");c.className="chips";l.forEach(w=>{const e=document.createElement("span");e.className="chip";e.textContent=show(w);c.append(e)});win.append(a,c)};
+    grp("Slovní rodina",others); grp("Příbuzné původem",fam.refs);
+    if(others.length||fam.refs.length){const s=document.createElement("p");s.className="src";s.textContent="Rodiny podle Českého etymologického slovníku (J. Rejzek).";win.append(s)}
+  }
+  const next=[0,1,2].find(k=>k!==slot&&!load(num,k).solved&&!load(num,k).gave);
+  if(next!=null){const b=document.createElement("button");b.type="button";b.className="primary";b.textContent=`Další hádanka: ${LEVELS[next].toLowerCase()}`;b.onclick=()=>open(num,next);win.append(b)}
+  else if(num!==MAXDAY){const b=document.createElement("button");b.type="button";b.textContent="Zpět na dnešní hádanky";b.onclick=()=>open(MAXDAY,0);win.append(b)}
+}
+function submit(raw){
+  if(!R||st.solved||st.gave) return;
+  const text=norm(raw); if(!text) return;
+  const i=findWord(text);
+  if(i<0&&!formsDone){ setStatus("Vteřinku, ještě se učím skloňování…"); formsP.then(()=>submit(raw)); return }
+  if(i<0){
+    if(KNOWN.has(text)||KNOWN.has(bare(text))){setStatus(`„${text}“ je české slovo, ale teploměr na něj nereaguje. Zkus jiné.`,true);return}
+    const s=suggest(text);setStatus(`„${text}“ neznám, a to jsem přečetl půl internetu.`+(s?"":" Zkus jiné slovo."),true,s);return;
+  }
+  const w=WORDS[i];
+  $("guess").value="";
+  if(st.g.some(g=>g.w===w)){st.last=w;save();render();setStatus(`„${show(w)}“ už jsi zkoušel. Teploměr má dobrou paměť.`);return}
+  const entry={w}; if(bare(text)!==bare(w)) entry.typed=text;
+  st.g.push(entry); st.last=w;
+  const r=R.rank[i], t=temp(r);
+  if(r===1) st.solved=true;
+  save(); render(true);
+  const best=bestTemp();
+  if(r===1){
+    setStatus("");
+    $("win").hidden=true;
+    animateTo(100,()=>{ $("thermo").classList.add("boil");
+      setTimeout(()=>{ $("thermo").classList.remove("boil"); explode(); setTimeout(()=>{renderWin();$("win").hidden=false;$("win").scrollIntoView({behavior:reduce?"auto":"smooth",block:"nearest"})},500); }, reduce?0:900); });
+  } else {
+    animateTo(best);
+    const prevBest=Math.min(...st.g.slice(0,-1).map(g=>rankOf(g.w)),Infinity);
+    let msg=r===FAR?`${show(w)}: daleko, až za 3 000. místem. Přesné místo dopočítám za chvilku.`:`${show(w)}: ${r.toLocaleString("cs-CZ")}. místo. ${quip(t)}`;
+    if(st.g.length>1&&r<prevBest&&r!==FAR) msg+=` Nový rekord, o ${(prevBest-r).toLocaleString("cs-CZ")} míst blíž!`;
+    setStatus(msg); beep(t);
+  }
+}
+const MAXHINT=3;
+function hint(){
+  if(st.hints>=MAXHINT){setStatus("Nápovědy došly. Teď už jen ty a tvůj mozek.");return}
+  const ranks=new Set(st.g.map(g=>rankOf(g.w)));
+  const best=Math.min(...ranks,Infinity);
+  const cap=[150,30,6][st.hints];             // 1. teplo, 2. přihořívá, 3. hoří
+  let target=Math.max(2,Math.min(cap,Math.floor(best/2)));
+  while(target>2&&ranks.has(target)) target--;
+  if(ranks.has(target)){setStatus("Tvůj nejlepší tip je blíž, než by ti nápověda pomohla. Jen tak dál!");return}
+  const w=WORDS[R.order[target-1]];
+  st.hints++; st.g.push({w,hint:true}); st.last=w; save(); render(true);
+  animateTo(bestTemp());
+  const left=MAXHINT-st.hints;
+  setStatus(`Nápověda: „${show(w)}“ je na ${target}. místě. ${left?(left===1?"Zbývá poslední nápověda.":`Zbývají ${left} nápovědy.`):"To byla poslední nápověda, teď už sám!"}`);
+}
+let openTok=0;
+async function open(d,k){
+  const tok=++openTok; k=k??0;
+  const nr=WORDS.length?await rankingFor(secretOf(d,k)):null;
+  if(tok!==openTok) return;
+  num=d; slot=k; st=load(num,slot); $("archive").value=String(num); setStatus("");
+  if(nr){ secretIdx=INDEX.get(secretOf(num,slot)); R=nr }
+  setBroken(!!(R&&st.solved));
+  render();
+  if(R){ if(st.gave&&!st.solved) animateTo(bestTemp()); else animateTo(st.solved?100:bestTemp()) }
+}
+
+/* ---------- osobní statistiky ---------- */
+function myStats(){
+  let played=0,solved=0,tries=[],streak=0,best=0,run=0,gave=0;
+  const buckets=[[1,10],[11,25],[26,50],[51,100],[101,1e9]],dist=[0,0,0,0,0];
+  for(let d=1;d<=MAXDAY;d++){
+    let any=false;
+    for(let k=0;k<3;k++){
+      const v=load(d,k); const t=v.g.filter(g=>!g.hint).length;
+      if(v.g.length) played++;
+      if(v.solved){solved++;any=true;tries.push(t);dist[buckets.findIndex(([a,b])=>t>=a&&t<=b)]++}
+      else if(v.gave) gave++;
+    }
+    if(any){run++;best=Math.max(best,run)} else if(d<MAXDAY) run=0;
+  }
+  streak=run;
+  return {played,solved,gave,avg:tries.length?Math.round(tries.reduce((a,b)=>a+b,0)/tries.length):0,streak,best,dist,buckets};
+}
+function renderMyStats(){
+  const m=myStats(), box=$("myStats"); box.innerHTML="";
+  if(!m.played){box.hidden=true;return} box.hidden=false;
+  const h=document.createElement("h3");h.textContent="Tvoje statistiky";
+  const nums=document.createElement("div");nums.className="mynums";
+  [["Odehráno",m.played],["Uhodnuto",m.played?Math.round(100*m.solved/m.played)+" %":"—"],["Průměr pokusů",m.solved?m.avg:"—"],["Série dní",m.streak+(m.best>m.streak?" (max "+m.best+")":"")]].forEach(([k,v])=>{
+    const d=document.createElement("div");const b=document.createElement("b");b.textContent=v;const sp=document.createElement("span");sp.textContent=k;d.append(b,sp);nums.append(d)});
+  box.append(h,nums);
+  if(m.solved){
+    const dist=document.createElement("div");dist.className="dist";const mx=Math.max(...m.dist,1);
+    const mine=st&&st.solved?st.g.filter(g=>!g.hint).length:-1;
+    m.buckets.forEach(([a,b],k)=>{const row=document.createElement("div");
+      if(mine>=a&&mine<=b) row.className="me";
+      const l=document.createElement("span");l.textContent=b>1e8?a+"+":a+"–"+b;
+      const bar=document.createElement("span");const i=document.createElement("i");i.style.width=(100*m.dist[k]/mx)+"%";bar.append(i);
+      const c=document.createElement("em");c.textContent=m.dist[k];row.append(l,bar,c);dist.append(row)});
+    const lab=document.createElement("p");lab.className="label";lab.style.margin="0";lab.textContent="Na kolik pokusů uhodnuto";
+    box.append(lab,dist);
+  }
+}
+
+for(let n=MAXDAY;n>=1;n--){const o=document.createElement("option");o.value=n;o.textContent=n===MAXDAY?`den ${n} (dnes)`:`den ${n}`;$("archive").append(o)}
+$("archive").onchange=e=>open(Number(e.target.value),0);
+renderSoundBtn();
+$("soundBtn").onclick=()=>{SOUND=!SOUND;try{localStorage.setItem("teplomer-zvuk",SOUND?"1":"0")}catch(e){};renderSoundBtn();if(SOUND)beep(50)};
+$("form").addEventListener("submit",e=>{e.preventDefault();submit($("guess").value)});
+$("hintBtn").onclick=hint;
+const GIVE=["Opravdu to chceš vzdát? Teploměr už si chystal ohňostroj.","Vzdát se? Rtuť je zklamaná a dívá se na tebe smutnýma očima.","Fakt? Ještě jeden tip a třeba to bouchne!","Odvážné rozhodnutí. Teploměr ho bude respektovat, ale potají brečet.","Vzdát se teď? To je jako odejít z kina pět minut před koncem."];
+$("giveBtn").onclick=()=>{$("giveText").textContent=GIVE[Math.floor(Math.random()*GIVE.length)];$("giveConfirm").hidden=false;$("giveNo").focus()};
+$("giveNo").onclick=()=>{$("giveConfirm").hidden=true;setStatus("Tak to je duch! Teploměr věřil, že to nevzdáš.");$("guess").focus()};
+$("giveYes").onclick=()=>{$("giveConfirm").hidden=true;st.gave=true;save();render();setStatus("Vzdát se taky chce odvahu. Zítra to rozbiješ.")};
+
+slot=Math.max(0,[0,1,2].findIndex(k=>{const v=load(num,k);return !v.solved&&!v.gave}));
+st=load(num,slot); buildThermo(); render();
+[0,1,2].forEach(k=>loadChunk(chunkOf(secretOf(num,k))));
+loadDict().then(async()=>{
+  await open(num,slot); $("loading").hidden=true; loadExtras(); $("guess").focus({preventScroll:true});
+}).catch(err=>{ $("loadText").textContent="Slovník se nepodařilo načíst. Obnov stránku a zkus to znovu."; console.error(err) });
+</script>
+
+</body>
+</html>
